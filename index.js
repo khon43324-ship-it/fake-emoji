@@ -4,7 +4,8 @@
   var unpatches = [];
 
   // <:name:id> hoac <a:name:id>
-  var EMOJI_RE = /<(a?):(\w{2,32}):(\d{17,20})>/g;
+  // ten emoji co the chua dau ~ (vd son~3)
+  var EMOJI_RE = /<(a?):([\w~]{2,32}):(\d{17,20})>/g;
 
   function log(m) {
     try { vendetta.logger.log("[FakeEmoji] " + m); } catch (e) {}
@@ -13,10 +14,18 @@
     try { vendetta.ui.toasts.showToast(m); } catch (e) {}
   }
 
+  // Ma hoa giong URLSearchParams (~ -> %7E)
+  function encName(name) {
+    return encodeURIComponent(name).replace(/[!'()*~]/g, function (c) {
+      return "%" + c.charCodeAt(0).toString(16).toUpperCase();
+    });
+  }
+
+  // Dang giong Vencord: [ten](link)
   function toLink(animated, name, id) {
     return (
-      "https://cdn.discordapp.com/emojis/" + id + "." +
-      (animated ? "gif" : "webp") + "?size=48&name=" + name
+      "[" + name + "](https://cdn.discordapp.com/emojis/" + id + "." +
+      (animated ? "gif" : "webp") + "?size=48&name=" + encName(name) + "&lossless=true)"
     );
   }
 

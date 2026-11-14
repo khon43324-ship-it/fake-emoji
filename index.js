@@ -4,6 +4,9 @@
   var unpatches = [];
   var seenKeys = {};
 
+  // Bat thong bao chan doan (DBG ...). Dat false khi da chay on.
+  var DEBUG = true;
+
   // <:name:id> hoac <a:name:id>
   // ten emoji co the chua dau ~ (vd son~3)
   var EMOJI_RE = /<(a?):([\w~]{2,32}):(\d{17,20})>/g;
@@ -14,6 +17,19 @@
   }
   function toast(m) {
     try { vendetta.ui.toasts.showToast(m); } catch (e) {}
+  }
+  function dbg(m) {
+    log("DBG " + m);
+    if (DEBUG) toast("DBG " + m);
+  }
+
+  // Mo ta ngan gon mot gia tri de hien trong thong bao
+  function desc(v) {
+    try {
+      if (Array.isArray(v)) return "mang(" + v.length + ")" + (v.length ? ":" + desc(v[0]) : "");
+      if (v && typeof v === "object") return "obj{" + Object.keys(v).slice(0, 6).join(",") + "}";
+      return typeof v + (typeof v === "string" || typeof v === "number" ? "=" + String(v).slice(0, 20) : "");
+    } catch (e) { return "?"; }
   }
 
   // Ma hoa giong URLSearchParams (~ -> %7E)
@@ -42,12 +58,19 @@
     );
   }
 
+  // Link du phong khi khong tra duoc thong tin sticker (chi biet id)
+  function fallbackStickerLink(id) {
+    return "[sticker](https://media.discordapp.net/stickers/" + id + ".png?size=160&name=sticker)";
+  }
+
   // Doi danh sach sticker thanh chuoi link.
   // Tra ve null neu phai de Discord gui binh thuong.
   function stickersToLinks(channelId, ids) {
+    if (!ids || !ids.length) return null;
+
     var StickersStore = metro.findByStoreName("StickersStore");
     var ChannelStore = metro.findByStoreName("ChannelStore");
-    if (!StickersStore || !ids || !ids.length) return null;
+    if (!StickersStore) dbg("khong co StickersStore, dung link du phong");
 
     var ch = ChannelStore && ChannelStore.getChannel(channelId);
     var guildId = ch && ch.guild_id;
@@ -55,15 +78,29 @@
 
     for (var i = 0; i < ids.length; i++) {
       var sid = ids[i] && typeof ids[i] === "object" ? ids[i].id : ids[i];
-      var st = StickersStore.getStickerById(sid);
-      if (!st) return null;
+      var st = null;
+      try {
+        st = StickersStore && StickersStore.getStickerById ? StickersStore.getStickerById(sid) : null;
+      } catch (e) {}
+
+      if (!st) {
+        dbg("khong tra duoc sticker " + desc(sid) + ", dung link png");
+        links.push(fallbackStickerLink(sid));
+        continue;
+      }
 
       var gid = st.guild_id != null ? st.guild_id : st.guildId;
       // Sticker cua chinh server dang chat thi gui binh thuong
-      if (guildId && gid === guildId) return null;
+      if (guildId && gid === guildId) {
+        dbg("sticker cua server hien tai, gui binh thuong");
+        return null;
+      }
 
       var link = stickerLink(st);
-      if (!link) return null;
+      if (!link) {
+        dbg("sticker Lottie, khong the doi thanh link");
+        return null;
+      }
       links.push(link);
     }
     return links.join(" ");
@@ -92,10 +129,7 @@
               var key = STICKER_FIELDS[f];
               var ids = o[key];
               if (!Array.isArray(ids) || !ids.length) continue;
-              if (!seenKeys[key]) {
-                seenKeys[key] = true;
-                toast("FakeEmoji: sendMessage co truong " + key);
-              }
+              dbg("sendMessage co truong " + key + " = " + desc(ids));
               var links = stickersToLinks(channelId, ids);
               if (links) {
                 msg.content = (typeof msg.content === "string" && msg.content ? msg.content + " " : "") + links;
@@ -142,6 +176,7 @@
         unpatches.push(
           patcher.instead(k, m, function (args, orig) {
             try {
+              dbg(k + " goi: " + args.map(desc).join(" | "));
               var channelId = args[0];
               var ids = null;
               for (var i = 1; i < args.length; i++) {
@@ -149,6 +184,7 @@
               }
               var links = ids && MessageActions ? stickersToLinks(channelId, ids) : null;
               if (!links) return orig.apply(m, args);
+              dbg(k + " -> gui link thay sticker");
               return MessageActions.sendMessage(channelId, {
                 content: links,
                 tts: false,
@@ -182,6 +218,7 @@
               var ids = body[key];
               if (!Array.isArray(ids) || !ids.length) continue;
               var links = stickersToLinks(m[1], ids);
+              dbg("rest " + key + "=" + desc(ids) + " -> " + (links ? "doi thanh link" : "giu nguyen"));
               if (!links) continue;
               body.content = (typeof body.content === "string" && body.content ? body.content + " " : "") + links;
               delete body[key];

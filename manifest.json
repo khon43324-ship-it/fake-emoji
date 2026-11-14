@@ -1,8 +1,8 @@
 {
-  "name": "Fake Emoji",
+  "name": "Fake nitro",
   "description": "Gửi emoji của server khác dưới dạng link ảnh (thử nghiệm, không phải Nitro thật).",
   "authors": [{ "name": "me" }],
   "main": "index.js",
-  "hash": "1",
+  "hash": "2",
   "vendetta": { "icon": "ic_message_edit" }
 }

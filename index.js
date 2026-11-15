@@ -41,7 +41,7 @@
   function toLink(animated, name, id) {
     return (
       "[" + name + "](https://cdn.discordapp.com/emojis/" + id + "." +
-      (animated ? "gif" : "webp") + "?size=48&name=" + encName(name) + "&lossless=true)"
+      (animated ? "webp" : "webp") + "?size=48&name=" + encName(name) + "&lossless=true)"
     );
   }
 

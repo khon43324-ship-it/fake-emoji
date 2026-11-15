@@ -4,7 +4,7 @@
   var unpatches = [];
 
   // Bat thong bao chan doan (DBG ...). Dat false khi da chay on.
-  var DEBUG = true;
+  var DEBUG = false;
 
   // <:name:id> hoac <a:name:id>
   // ten emoji co the chua dau ~ (vd son~3)

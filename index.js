@@ -61,6 +61,45 @@
     return "[sticker](https://media.discordapp.net/stickers/" + id + ".png?size=160&name=sticker)";
   }
 
+  // Gui mot tin nhan chua link. Uu tien goi thang API (khong phu thuoc tham so cua sendMessage)
+  // va bao ket qua tu may chu.
+  function sendLinkMessage(channelId, content) {
+    var Rest = metro.findByProps("getAPIBaseURL", "post");
+    if (Rest && typeof Rest.post === "function") {
+      try {
+        var p = Rest.post({
+          url: "/channels/" + channelId + "/messages",
+          body: { content: content, tts: false }
+        });
+        if (p && typeof p.then === "function") {
+          p.then(
+            function (r) { dbg("gui link qua REST: OK " + (r && r.status != null ? r.status : "")); },
+            function (e) {
+              var detail = "";
+              try {
+                detail = (e && (e.status || e.message)) || "?";
+                if (e && e.body && (e.body.message || e.body.code)) detail += " " + (e.body.message || e.body.code);
+              } catch (x) {}
+              dbg("gui link qua REST: LOI " + detail);
+            }
+          );
+        }
+        return p;
+      } catch (e) {
+        log("sendLinkMessage REST loi: " + e);
+      }
+    }
+    var MA = metro.findByProps("sendMessage", "receiveMessage");
+    if (!MA) return;
+    dbg("khong co REST, dung sendMessage");
+    return MA.sendMessage(channelId, {
+      content: content,
+      tts: false,
+      invalidEmojis: [],
+      validNonShortcutEmojis: []
+    });
+  }
+
   // Cac truong nao cua mot doi tuong chua danh sach sticker
   function findStickerKeys(o) {
     var keys = [];
@@ -223,12 +262,9 @@
               var res = ids && MessageActions ? stickersToLinks(channelId, ids) : { links: null, why: "khong co mang id" };
               dbg(k + ": " + args.map(desc).join(" | ") + " -> " + (res.links ? "LINK" : "giu") + " (" + res.why + ")");
               if (!res.links) return orig.apply(m, args);
-              return MessageActions.sendMessage(channelId, {
-                content: res.links,
-                tts: false,
-                invalidEmojis: [],
-                validNonShortcutEmojis: []
-              });
+              // Tham so thu 3 (neu la chuoi) la chu nguoi dung go kem sticker
+              var typed = typeof args[2] === "string" && args[2] ? args[2] + " " : "";
+              return sendLinkMessage(channelId, typed + res.links);
             } catch (e) {
               log(k + " loi: " + e);
               return orig.apply(m, args);
@@ -309,7 +345,7 @@
       try { perms = patchPermissions(); } catch (e) { log("patchPermissions loi: " + e); }
 
       var msg =
-        "FakeEmoji v6 - gui: " + (sendOk ? "OK" : "LOI") +
+        "FakeEmoji v7 - gui: " + (sendOk ? "OK" : "LOI") +
         ", sticker: " + (layers.length ? layers.join("+") : "khong tim thay") +
         ", mo khoa: " + (perms.length ? perms.join(", ") : "khong tim thay");
       log(msg);

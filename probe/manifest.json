@@ -1,0 +1,8 @@
+{
+  "name": "Upload Probe",
+  "description": "Chan doan: liet ke cac ham upload cua Discord (khong thay doi hanh vi).",
+  "authors": [{ "name": "me" }],
+  "main": "index.js",
+  "hash": "1",
+  "vendetta": { "icon": "ic_upload" }
+}

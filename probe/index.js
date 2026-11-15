@@ -2,47 +2,75 @@
   var metro = vendetta.metro;
   var patcher = vendetta.patcher;
   var unpatches = [];
-  var counts = {};
-  var MAX_PATCHES = 40;
-  var MAX_PER_FN = 3; // moi ham chi bao toi da 3 lan
+  var events = [];
+  var timer = null;
+  var lastShown = 0;
   var NAME_RE = /upload|addfile/i;
+  var MAX_PATCHES = 40;
+  var MAX_CHARS = 2400;
 
-  function log(m) { try { vendetta.logger.log("[Probe] " + m); } catch (e) {} }
+  function log(m) { try { vendetta.logger.log("[Probe2] " + m); } catch (e) {} }
   function toast(m) { try { vendetta.ui.toasts.showToast(m); } catch (e) {} }
 
-  // Mo ta ngan gon mot gia tri, chu y cac truong lien quan den file
-  function brief(v, depth) {
+  // Mo ta cau truc mot gia tri thanh nhieu dong co thut le
+  function dump(v, depth, ind) {
     try {
-      depth = depth || 0;
       if (v == null) return String(v);
-      if (depth > 3 && typeof v === "object") return "..";
       var t = typeof v;
-      if (t === "string") {
-        return /^(file|content|ph|assets-library):/i.test(v) ? "uri:" + v.slice(0, 36) : "str(" + v.length + ")";
-      }
+      if (t === "string") return JSON.stringify(v.length > 70 ? v.slice(0, 70) + "..(" + v.length + ")" : v);
       if (t === "number" || t === "boolean") return String(v);
       if (t === "function") return "fn";
-      if (Array.isArray(v)) return "[" + v.length + (v.length ? " " + brief(v[0], depth + 1) : "") + "]";
+      if (Array.isArray(v)) {
+        if (!v.length) return "[]";
+        if (depth >= 4) return "[" + v.length + "]";
+        return "[" + v.length + "]\n" + ind + "  0: " + dump(v[0], depth + 1, ind + "  ");
+      }
       if (t === "object") {
-        var keys = Object.keys(v).slice(0, 8);
-        var hints = keys
-          .filter(function (k) { return /size|name|uri|path|mime|type|length|channel|file|item|upload|attach/i.test(k); })
-          .map(function (k) { return k + "=" + brief(v[k], depth + 1); });
-        return "{" + keys.join(",") + (hints.length ? " | " + hints.join(" ") : "") + "}";
+        var keys = Object.keys(v);
+        if (!keys.length) return "{}";
+        if (depth >= 4) return "{" + keys.slice(0, 10).join(",") + "}";
+        var lines = keys.slice(0, 14).map(function (k) {
+          var val;
+          try { val = v[k]; } catch (e) { val = "(loi doc)"; }
+          return ind + "  " + k + ": " + dump(val, depth + 1, ind + "  ");
+        });
+        if (keys.length > 14) lines.push(ind + "  ... +" + (keys.length - 14) + " truong");
+        return "\n" + lines.join("\n");
       }
       return t;
     } catch (e) { return "?"; }
   }
 
-  function report(name, args) {
-    counts[name] = (counts[name] || 0) + 1;
-    if (counts[name] > MAX_PER_FN) return;
-    var msg = "PROBE " + name + "(" + Array.prototype.map.call(args, function (a) { return brief(a, 0); }).join(" | ") + ")";
-    log(msg);
-    toast(msg);
+  function showReport() {
+    timer = null;
+    var text = events.join("\n------\n");
+    events = [];
+    if (text.length > MAX_CHARS) text = text.slice(0, MAX_CHARS) + "\n...(cat bot)";
+    log(text);
+    lastShown = Date.now();
+    try {
+      vendetta.ui.alerts.showConfirmationAlert({
+        title: "UPLOAD PROBE - chup man hinh nay",
+        content: text,
+        confirmText: "Dong",
+        onConfirm: function () {},
+        isDismissable: true
+      });
+    } catch (e) {
+      toast("PROBE: khong mo duoc hop thoai: " + e);
+    }
   }
 
-  // Tim cac module co ham ten giong upload
+  function record(name, args) {
+    // Hop thoai chi hien lai sau it nhat 5 giay
+    if (Date.now() - lastShown < 5000 && !timer && events.length === 0) return;
+    var parts = Array.prototype.map.call(args, function (a, i) {
+      return "arg" + i + ": " + dump(a, name === "uploadMessageAttachments" ? 0 : 2, "");
+    });
+    events.push(name + "\n" + parts.join("\n"));
+    if (!timer) timer = setTimeout(showReport, 1500);
+  }
+
   function findCandidates() {
     var found = [];
     var mods = [];
@@ -51,19 +79,16 @@
         mods = metro.findAll(function (m) { return m && (typeof m === "object" || typeof m === "function"); }) || [];
       }
     } catch (e) { log("findAll loi: " + e); }
-
-    // Du phong neu khong co findAll
     if (!mods.length) {
-      ["uploadFiles", "addFiles", "upload", "uploadFile", "CloudUpload", "UploadManager"].forEach(function (k) {
+      ["uploadMessageAttachments", "uploadFiles", "addFiles", "upload"].forEach(function (k) {
         try { var m = metro.findByProps(k); if (m) mods.push(m); } catch (e) {}
       });
     }
-
-    var seenMods = [];
+    var seen = [];
     mods.forEach(function (m) {
       try {
-        if (seenMods.indexOf(m) !== -1) return;
-        seenMods.push(m);
+        if (seen.indexOf(m) !== -1) return;
+        seen.push(m);
         Object.keys(m).forEach(function (k) {
           var fn;
           try { fn = m[k]; } catch (e) { return; }
@@ -76,19 +101,19 @@
 
   function patchAll() {
     var cands = findCandidates();
-    var patched = [];
-    for (var i = 0; i < cands.length && patched.length < MAX_PATCHES; i++) {
+    var names = [];
+    for (var i = 0; i < cands.length && names.length < MAX_PATCHES; i++) {
       (function (c) {
         try {
-          unpatches.push(patcher.before(c.name, c.mod, function (args) { report(c.name, args); }));
-          patched.push(c.name);
+          unpatches.push(patcher.before(c.name, c.mod, function (args) { record(c.name, args); }));
+          names.push(c.name);
         } catch (e) {}
       })(cands[i]);
     }
-    return { patched: patched, total: cands.length };
+    return names;
   }
 
-  // Bao loi khi gui tin nhan len API (vd 413 / ma 40005: file qua lon)
+  // Bao loi tu may chu khi gui tin nhan / tai file
   function patchRest() {
     var Rest = metro.findByProps("getAPIBaseURL", "post");
     if (!Rest || typeof Rest.post !== "function") return false;
@@ -97,12 +122,12 @@
         var p = orig.apply(Rest, args);
         try {
           var url = args[0] && args[0].url;
-          if (typeof url === "string" && /\/messages|attachments/.test(url) && p && typeof p.then === "function") {
+          if (typeof url === "string" && /messages|attachments/.test(url) && p && typeof p.then === "function") {
             p.then(null, function (e) {
               var detail = (e && (e.status || e.message)) || "?";
-              try { if (e && e.body && (e.body.code || e.body.message)) detail += " code=" + e.body.code + " " + e.body.message; } catch (x) {}
-              var msg = "PROBE REST LOI " + url.slice(0, 40) + " -> " + detail;
-              log(msg); toast(msg);
+              try { if (e && e.body) detail += " " + JSON.stringify(e.body).slice(0, 200); } catch (x) {}
+              events.push("REST LOI " + url.slice(0, 60) + "\n" + detail);
+              if (!timer) timer = setTimeout(showReport, 800);
             });
           }
         } catch (e) {}
@@ -114,19 +139,34 @@
 
   return {
     onLoad: function () {
-      var r = { patched: [], total: 0 };
+      var names = [];
       var restOk = false;
-      try { r = patchAll(); } catch (e) { log("patchAll loi: " + e); }
+      try { names = patchAll(); } catch (e) { log("patchAll loi: " + e); }
       try { restOk = patchRest(); } catch (e) { log("patchRest loi: " + e); }
-
-      var uniq = r.patched.filter(function (n, i, a) { return a.indexOf(n) === i; });
-      toast("PROBE: " + uniq.length + " ham upload da gan" + (restOk ? ", rest OK" : ", rest khong co"));
-      if (uniq.length) toast("PROBE ham: " + uniq.slice(0, 12).join(", "));
+      var uniq = names.filter(function (n, i, a) { return a.indexOf(n) === i; });
+      toast("PROBE2: " + uniq.length + " ham, rest " + (restOk ? "OK" : "khong co"));
       log("ham: " + uniq.join(", "));
+
+      // Hien danh sach ten ham trong mot hop thoai de chup man hinh
+      setTimeout(function () {
+        try {
+          var text = uniq.length ? uniq.join(", ") : "(khong tim thay ham nao)";
+          if (text.length > 1800) text = text.slice(0, 1800) + "...";
+          vendetta.ui.alerts.showConfirmationAlert({
+            title: "PROBE2 - danh sach ham (chup man hinh)",
+            content: text,
+            confirmText: "Dong",
+            onConfirm: function () {},
+            isDismissable: true
+          });
+        } catch (e) { toast("PROBE2: khong mo duoc hop thoai: " + e); }
+      }, 2500);
     },
     onUnload: function () {
+      if (timer) { clearTimeout(timer); timer = null; }
       unpatches.forEach(function (u) { try { u(); } catch (e) {} });
       unpatches = [];
+      events = [];
     }
   };
 })()

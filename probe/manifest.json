@@ -3,6 +3,6 @@
   "description": "File qua gioi han dung luong se duoc chia thanh nhieu phan 9 MB va gui lan luot (nguoi nhan tu ghep lai).",
   "authors": [{ "name": "ttran" }],
   "main": "index.js",
-  "hash": "1",
+  "hash": "2",
   "vendetta": { "icon": "ic_upload" }
 }

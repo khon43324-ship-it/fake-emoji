@@ -1,7 +1,7 @@
 {
   "name": "Custom RPC",
   "description": "Dat trang thai hoat dong tuy chinh (dang choi, nghe, xem...) cho ho so cua ban.",
-  "authors": [{ "name": "me" }],
+  "authors": [{ "name": "ttran" }],
   "main": "index.js",
   "hash": "1",
   "vendetta": { "icon": "ic_game_controller_24px" }

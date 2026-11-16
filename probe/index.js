@@ -6,7 +6,7 @@
 
   // ===== Cai dat (sua tai day) =====
   var DEBUG = true;                 // hien thong bao chan doan
-  var LIMIT = 10 * 1024 * 1024;     // gioi han Discord cho tai khoan khong Nitro (10 MiB)
+  var LIMIT = 10 * 1000 * 1000;     // gioi han Discord cho tai khoan khong Nitro (10.000.000 byte, da kiem chung bang file 10,10 MB)
   var PART = 9 * 1024 * 1024;       // moi phan toi da 9 MiB (thap hon gioi han de du cho)
   var DELAY = 1200;                 // nghi giua cac phan (ms) de tranh bi gioi han toc do
   var SPLIT_MEDIA = false;          // false: anh/video de Discord tu nen, khong chia
